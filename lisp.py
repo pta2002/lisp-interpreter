@@ -23,6 +23,8 @@ class Lisp_Int(LispType):
         return self.val < o
     def __gt__(self, o):
         return self.val > o
+    def __int__(self):
+        return self.val
 
 class Lisp_String(LispType):
     def __init__(self, s):
@@ -106,7 +108,7 @@ class Lisp_Environment(object):
                 ast.append(self.make_ast(ins))
             else:
                 if i == 0:
-                    if ins[0] not in '0123456789"()':
+                    if ins[0].strip() not in '0123456789"()':
                         ast.append(Lisp_Keyword(ins))
                 else:
                     if ins[0] == "\"":
@@ -116,7 +118,7 @@ class Lisp_Environment(object):
                             ast.append(Lisp_Int(int(ins)))
                         except ValueError:
                             raise Exception("Not a number: %s" % ins)
-                    else:
+                    elif ins.strip() != '':
                         ast.append(Lisp_Var(ins))
 
         return Lisp_Block(ast)
@@ -133,6 +135,12 @@ class Lisp_Environment(object):
                     self.run_ast(ast.body[2])
                 elif len(ast.body) == 4:
                     self.run_ast(ast.body[3])
+                return L_nil
+            elif ast.body[0].keyword == 'while':
+                if len(ast.body) != 3:
+                    raise Exception("while expects 2 parameters")
+                while self.run_ast(ast.body[1]):
+                    self.run_ast(ast.body[2])
                 return L_nil
             elif ast.body[0].keyword == 'set':
                 self.vars[ast.body[1].var] = ast.body[2].get_val(self)
@@ -166,12 +174,12 @@ class Lisp_Environment(object):
                 elif to_run == ">":
                     return args[0] > args[1]
                 elif to_run == "<":
-                    return args[0] < args[1]
+                    return int(args[0]) < int(args[1])
                 elif to_run == "set":
                     self.vars[args[0]] = args[1]
                     return T_nil
                 else:
-                    raise Exception("%s not found" % i.keyword)
+                    raise Exception("%s not found" % i)
                 
     def split_lisp(self, code):
         m = []
@@ -183,7 +191,7 @@ class Lisp_Environment(object):
         while i < len(code):
             if code[i] == "(":
                 m.append(self.split_lisp(code[i:braces[i]+1]))
-                making = braces[i]
+                making = braces[i] + 1
                 i = braces[i]
             elif code[i] == "\"" and (i == 0 or code[i-1] != "\\"):
                 m.append(code[i:quotes[i]+1])

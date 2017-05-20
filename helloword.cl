@@ -1,3 +1,4 @@
-(set c 2)
-(write-line c)
-(set c 2)
+(set counter 0)
+(while (< counter 10) (
+    (set counter (add counter 1))
+    (write-line counter)))
