@@ -48,7 +48,9 @@ class Lisp_Block(LispType):
     def __init__(self, body):
         self.body = body
     def get_val(self, env):
-        return self.body
+        return env.run_ast(self)
+    def __str__(self):
+        return str(self.body)
 
 class Lisp_Var(LispType):
     def __init__(self, var):
@@ -114,6 +116,8 @@ class Lisp_Environment(object):
                             ast.append(Lisp_Int(int(ins)))
                         except ValueError:
                             raise Exception("Not a number: %s" % ins)
+                    else:
+                        ast.append(Lisp_Var(ins))
 
         return Lisp_Block(ast)
 
@@ -121,7 +125,6 @@ class Lisp_Environment(object):
         self.run_ast(self.ast)
 
     def run_ast(self, ast):
-        args = []
         if type(ast.body[0]) == Lisp_Keyword:
             if ast.body[0].keyword == 'if':
                 if len(ast.body) < 3:
@@ -131,31 +134,45 @@ class Lisp_Environment(object):
                 elif len(ast.body) == 4:
                     self.run_ast(ast.body[3])
                 return L_nil
-        for i in ast.body[::-1]:
+            elif ast.body[0].keyword == 'set':
+                self.vars[ast.body[1].var] = ast.body[2].get_val(self)
+                return L_nil
+
+        to_run = None
+        args = []
+        for i in ast.body:
             if type(i) == Lisp_Block:
                 args.append(self.run_ast(i))
+            elif type(i) == Lisp_Keyword:
+                to_run = i.keyword
+            elif type(i) == Lisp_Var:
+                args.append(self.vars[i.var])
             else:
-                if type(i) == Lisp_Keyword:
-                    args = args[::-1]
-                    if i.keyword in self.funcs:
-                        return self.funcs[i.keyword].run(args)
-                    else:
-                        if i.keyword == 'add':
-                            return sum(args)
-                        elif i.keyword == 'sub':
-                            s = args[0]
-                            for i in args[1:]:
-                                s -= i
-                            return s
-                        elif i.keyword == 'write-line':
-                            print(*args)
-                        elif i.keyword == ">":
-                            return args[0] > args[1]
-                        else:
-                            raise Exception("%s not found" % i.keyword)
-                else:
-                    args.append(i)
+                args.append(i)
 
+        if to_run:
+            if to_run in self.funcs:
+                return self.funcs[i.keyword].run(args)
+            else:
+                if to_run == 'add':
+                    return sum(args)
+                elif to_run == 'sub':
+                    s = args[0]
+                    for i in args[1:]:
+                        s -= i
+                    return s
+                elif to_run == 'write-line':
+                    print(*[x.get_val(self) if isinstance(x, LispType) else x for x in args])
+                elif to_run == ">":
+                    return args[0] > args[1]
+                elif to_run == "<":
+                    return args[0] < args[1]
+                elif to_run == "set":
+                    self.vars[args[0]] = args[1]
+                    return T_nil
+                else:
+                    raise Exception("%s not found" % i.keyword)
+                
     def split_lisp(self, code):
         m = []
         making = 0
