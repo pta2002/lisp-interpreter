@@ -19,6 +19,10 @@ class Lisp_Int(LispType):
         return o + self.val
     def __mul__(self, o):
         return self.val * o
+    def __lt__(self, o):
+        return self.val < o
+    def __gt__(self, o):
+        return self.val > o
 
 class Lisp_String(LispType):
     def __init__(self, s):
@@ -118,6 +122,15 @@ class Lisp_Environment(object):
 
     def run_ast(self, ast):
         args = []
+        if type(ast.body[0]) == Lisp_Keyword:
+            if ast.body[0].keyword == 'if':
+                if len(ast.body) < 3:
+                    raise Exception("if expected at least 2 parameters")
+                if self.run_ast(ast.body[1]):
+                    self.run_ast(ast.body[2])
+                elif len(ast.body) == 4:
+                    self.run_ast(ast.body[3])
+                return L_nil
         for i in ast.body[::-1]:
             if type(i) == Lisp_Block:
                 args.append(self.run_ast(i))
@@ -129,13 +142,17 @@ class Lisp_Environment(object):
                     else:
                         if i.keyword == 'add':
                             return sum(args)
-                        if i.keyword == 'sub':
-                            s = args[1]
+                        elif i.keyword == 'sub':
+                            s = args[0]
                             for i in args[1:]:
                                 s -= i
                             return s
-                        if i.keyword == 'write-line':
+                        elif i.keyword == 'write-line':
                             print(*args)
+                        elif i.keyword == ">":
+                            return args[0] > args[1]
+                        else:
+                            raise Exception("%s not found" % i.keyword)
                 else:
                     args.append(i)
 
