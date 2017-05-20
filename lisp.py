@@ -26,6 +26,16 @@ class Lisp_Int(LispType):
     def __int__(self):
         return self.val
 
+class Lisp_Bool(LispType):
+    def __init__(self, val):
+        self.val = val
+    def get_val(self, env):
+        return self.val
+    def __bool__(self):
+        return self.val
+    def __int__(self):
+        return 1 if self.val else 0
+
 class Lisp_String(LispType):
     def __init__(self, s):
         self.val = s
@@ -58,7 +68,7 @@ class Lisp_Var(LispType):
     def __init__(self, var):
         self.var = var
     def get_val(self, env):
-        return env.variables[self.var]
+        return env.vars[self.var]
 
 class Lisp_Function(LispType):
     def __init__(self, name, params):
@@ -118,6 +128,10 @@ class Lisp_Environment(object):
                             ast.append(Lisp_Int(int(ins)))
                         except ValueError:
                             raise Exception("Not a number: %s" % ins)
+                    elif ins == 'true':
+                        ast.append(Lisp_Bool(True))
+                    elif ins == 'false':
+                        ast.append(Lisp_Bool(False))
                     elif ins.strip() != '':
                         ast.append(Lisp_Var(ins))
 
@@ -131,7 +145,7 @@ class Lisp_Environment(object):
             if ast.body[0].keyword == 'if':
                 if len(ast.body) < 3:
                     raise Exception("if expected at least 2 parameters")
-                if self.run_ast(ast.body[1]):
+                if ast.body[1].get_val(self):
                     self.run_ast(ast.body[2])
                 elif len(ast.body) == 4:
                     self.run_ast(ast.body[3])
@@ -139,7 +153,7 @@ class Lisp_Environment(object):
             elif ast.body[0].keyword == 'while':
                 if len(ast.body) != 3:
                     raise Exception("while expects 2 parameters")
-                while self.run_ast(ast.body[1]):
+                while ast.body[1].get_val(self):
                     self.run_ast(ast.body[2])
                 return L_nil
             elif ast.body[0].keyword == 'set':
