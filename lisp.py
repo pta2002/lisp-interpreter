@@ -179,7 +179,7 @@ class Lisp_Environment(object):
             elif type(i) == Lisp_Keyword:
                 to_run = i.keyword
             elif type(i) == Lisp_Var:
-                args.append(vars[i.var])
+                args.append(vars.get(i.var, L_nil))
             else:
                 args.append(i)
 
