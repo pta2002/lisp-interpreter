@@ -1,13 +1,13 @@
 L_nil = None
 
 class LispType(object):
-    def get_val(self, env):
+    def get_val(self, env, vars={}):
         return L_nil
 
 class Lisp_Int(LispType):
     def __init__(self, num):
         self.val = num
-    def get_val(self, env):
+    def get_val(self, env, vars={}):
         return self.val
     def __add__(self, o):
         return self.val + o
@@ -29,7 +29,7 @@ class Lisp_Int(LispType):
 class Lisp_Bool(LispType):
     def __init__(self, val):
         self.val = val
-    def get_val(self, env):
+    def get_val(self, env, vars={}):
         return self.val
     def __bool__(self):
         return self.val
@@ -39,7 +39,7 @@ class Lisp_Bool(LispType):
 class Lisp_String(LispType):
     def __init__(self, s):
         self.val = s
-    def get_val(self, env):
+    def get_val(self, env, vars={}):
         return self.val
     def __str__(self):
         return self.val
@@ -47,43 +47,44 @@ class Lisp_String(LispType):
 class Lisp_List(LispType):
     def __init__(self, items):
         self.val = items
-    def get_val(self, env):
+    def get_val(self, env, vars={}):
         return self.val
 
 class Lisp_Keyword(LispType):
     def __init__(self, kw):
         self.keyword = kw
-    def get_val(self, env):
+    def get_val(self, env, vars={}):
         return self.keyword
 
 class Lisp_Block(LispType):
     def __init__(self, body):
         self.body = body
-    def get_val(self, env):
-        return env.run_ast(self)
+    def get_val(self, env, vars={}):
+        return env.run_ast(self, vars=vars)
     def __str__(self):
         return str(self.body)
 
 class Lisp_Var(LispType):
     def __init__(self, var):
         self.var = var
-    def get_val(self, env):
-        return env.vars[self.var]
+    def get_val(self, env, vars={}):
+        v = {**env.vars, **vars}
+        return v[self.var]
 
 class Lisp_Function(LispType):
-    def __init__(self, name, params):
-        self.name = name
+    def __init__(self, params, body):
+        self.body = body
         self.params = params
-    def get_val(self, env):
+    def get_val(self, env, vars={}):
         return self
-    def run(self, args, env):
+    def run(self, args, env, vars={}):
         params = {}
         if len(args) != len(self.params):
             raise Exception("Function %s expects %d arguments, %d given." % (self.name, len(self.params), len(args)))
         for arg in range(len(args)):
             params[self.params[arg]] = args[arg]
 
-        return env.run(self.body, extra=params)
+        return env.run_ast(self.body, vars={**vars, **params})
 
 
 
@@ -140,41 +141,51 @@ class Lisp_Environment(object):
     def run(self):
         self.run_ast(self.ast)
 
-    def run_ast(self, ast):
+    def run_ast(self, ast, vars={}):
+        vars = {**self.vars, **vars}
         if type(ast.body[0]) == Lisp_Keyword:
             if ast.body[0].keyword == 'if':
                 if len(ast.body) < 3:
                     raise Exception("if expected at least 2 parameters")
-                if ast.body[1].get_val(self):
-                    self.run_ast(ast.body[2])
+                if ast.body[1].get_val(self, vars=vars):
+                    self.run_ast(ast.body[2],vars=vars)
                 elif len(ast.body) == 4:
-                    self.run_ast(ast.body[3])
+                    self.run_ast(ast.body[3],vars=vars)
                 return L_nil
             elif ast.body[0].keyword == 'while':
                 if len(ast.body) != 3:
                     raise Exception("while expects 2 parameters")
-                while ast.body[1].get_val(self):
-                    self.run_ast(ast.body[2])
+                while ast.body[1].get_val(self, vars=vars):
+                    self.run_ast(ast.body[2], vars=vars)
                 return L_nil
             elif ast.body[0].keyword == 'set':
-                self.vars[ast.body[1].var] = ast.body[2].get_val(self)
+                self.vars[ast.body[1].var] = ast.body[2].get_val(self, vars=vars)
+                return L_nil
+            elif ast.body[0].keyword == 'defun':
+                params = []
+                for x in ast.body[2].body:
+                    if type(x) == Lisp_Var:
+                        params.append(x.var)
+                    elif type(x) == Lisp_Keyword:
+                        params.append(x.keyword)
+                self.funcs[ast.body[1].var] = Lisp_Function(params, ast.body[3])
                 return L_nil
 
         to_run = None
         args = []
         for i in ast.body:
             if type(i) == Lisp_Block:
-                args.append(self.run_ast(i))
+                args.append(self.run_ast(i, vars=vars))
             elif type(i) == Lisp_Keyword:
                 to_run = i.keyword
             elif type(i) == Lisp_Var:
-                args.append(self.vars[i.var])
+                args.append(vars[i.var])
             else:
                 args.append(i)
 
         if to_run:
             if to_run in self.funcs:
-                return self.funcs[i.keyword].run(args)
+                return self.funcs[to_run].run(args, self, vars)
             else:
                 if to_run == 'add':
                     return sum(args)
@@ -184,14 +195,11 @@ class Lisp_Environment(object):
                         s -= i
                     return s
                 elif to_run == 'write-line':
-                    print(*[x.get_val(self) if isinstance(x, LispType) else x for x in args])
+                    print(*[x.get_val(self, vars=vars) if isinstance(x, LispType) else x for x in args])
                 elif to_run == ">":
                     return args[0] > args[1]
                 elif to_run == "<":
                     return int(args[0]) < int(args[1])
-                elif to_run == "set":
-                    self.vars[args[0]] = args[1]
-                    return T_nil
                 else:
                     raise Exception("%s not found" % i)
                 
